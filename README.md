@@ -10,30 +10,26 @@ Processamento e formatação de informações.
 
 Envio de métricas para banco de dados.
 
-Integração com APIs externas para análise ou alertas.
-
-Identificação de informações únicas da máquina (MAC Address, hostname, etc.).
+Identificação de informações da máquina (CPU, RAM, Disco, etc.).
 
 Geração de logs e relatórios de atividade.
 
 Integração com dashboards para visualização de dados.
 
-🚀 Tecnologias
 
-Python 3.x
+<h1> 🚀 Tecnologias </h1>
+
+Python
 
 psutil
 
-requests
+Os
 
-pandas
+mysql-connector-python
 
-json
 
-SQL Alchemy ou conector de banco de dados (MySQL/PostgreSQL)
+<h1> 💻 Instalação </h1>
 
-💻 Instalação
-
-git clone https://github.com/sua-organizacao/captura-dados-python.git
-cd captura-dados-python
+https://github.com/Project-InfraFlow/data-python.git
+cd Script Captura V1
 pip install -r requirements.txt
