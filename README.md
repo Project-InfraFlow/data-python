@@ -26,10 +26,3 @@ psutil
 mysql-connector-python
 
 <br>
-
-<h1> 💻 Instalação </h1>
-
-`
-<br> https://github.com/Project-InfraFlow/data-python.git <br>
-<br> cd Script Captura V1 <br>
-pip install -r requirements.txt <br> `
