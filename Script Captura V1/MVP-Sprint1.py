@@ -2,6 +2,8 @@ import sys
 import os
 import time
 import threading
+import socket
+import platform
 
 import psutil as p
 import datetime as dt
@@ -14,6 +16,8 @@ import keyboard
 load_dotenv()
 inserir_no_banco = False
 moniroramento = False
+token_empresa = os.getenv("TOKEN_EMPRESA")
+id_maquina = os.getenv("ID_MAQUINA")
 
 config = {
       'user': os.getenv("USER_DB"),
@@ -43,14 +47,23 @@ def executar_query(query):
         time.sleep(2)
         sys.exit(1)
 
+def definir_maquina():
+    global token_empresa, id_maquina
+    executar_query(f"INSERT IGNORE INTO Maquina (idMaquina, TokenEmpresa, nomeMaquina, SO) VALUES ({id_maquina}, {token_empresa}, '{socket.gethostname()}', '{platform.platform()}');")
+
+def definir_componentes():
+    global token_empresa, id_maquina
+    executar_query(f"INSERT IGNORE INTO Componente (idComponente, idMaquina, TokenEmpresa, nomeComponente, UM) VALUES (1, {id_maquina}, {token_empresa}, 'CPU', '%'), (2, {id_maquina}, {token_empresa}, 'Memória', '%'), (3, {id_maquina}, {token_empresa}, 'Disco', '%');")
+
 def definir_nucleos():
+    global token_empresa, id_maquina
     nucleos_fisicos = p.cpu_count(logical=True)
     for i in range(1, nucleos_fisicos + 1):
-        executar_query(f"INSERT IGNORE INTO NucleoCPU (idNucleoCPU, idCPU) VALUES ({i}, 1)")
+        executar_query(f"INSERT IGNORE INTO NucleoCPU (idNucleoCPU, idMaquina, TokenEmpresa, idCPU) VALUES ({i}, {id_maquina}, {token_empresa}, 1)")
 
 
 def coletar_e_inserir_dados():
-    global inserir_no_banco
+    global inserir_no_banco, token_empresa, id_maquina
     while inserir_no_banco:
         cpu = p.cpu_percent(interval=10, percpu=True)
         memoria_usada = p.virtual_memory().percent
@@ -62,14 +75,14 @@ def coletar_e_inserir_dados():
                 condicao = "Alerta"
             else:
                 condicao = "Normal"
-            executar_query(f"INSERT INTO Leitura (idComponente, dado, hora, condicao, fkNucleo) VALUES (1, {cpu[i]}, '{horario}', '{condicao}', {i + 1})")
+            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, hora, condicao, fkNucleo) VALUES (1,  {id_maquina}, {token_empresa}, {cpu[i]}, '{horario}', '{condicao}', {i + 1})")
 
         for i in range(0, len(lista_memoria)):
             if (lista_memoria[i] > 80):
                 condicao = "Alerta"
             else:
                 condicao = "Normal"
-            executar_query(f"INSERT INTO Leitura (idComponente, dado, hora, condicao) VALUES ({i + 2}, {lista_memoria[i]}, '{horario}', '{condicao}')")
+            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, hora, condicao) VALUES ({i + 2},  {id_maquina}, {token_empresa}, {lista_memoria[i]}, '{horario}', '{condicao}')")
     
 def barra_progresso(valor, tipo='percent', tamanho=30):
     if tipo == 'percent':
@@ -86,11 +99,30 @@ def parar_monitoramento():
             moniroramento = False
             break
 
+definir_maquina()
+definir_componentes()
 definir_nucleos()
+
+query_monitoramento = f"""
+SELECT 
+    DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'),
+    SUM(CASE WHEN idComponente = 1  THEN (ROUND(dado/(SELECT COUNT(*) FROM NucleoCPU),2)) END) AS "cpu",
+    MAX(CASE WHEN idComponente = 2  THEN ROUND(dado, 2) END) AS "ram",
+    MAX(CASE WHEN idComponente = 3 THEN ROUND(dado, 2) END) AS "disco"
+FROM Leitura
+WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa}
+GROUP BY hora
+ORDER BY hora DESC
+LIMIT"""
+
+query_dados_maquina = executar_query(f"SELECT nomeMaquina, SO FROM Maquina WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa};") 
+
 
 while True:
     print(f"""
 MVP CAPTURA DE DADOS SPRINT1 - INFRAFLOW
+Nome da Máquina: {query_dados_maquina[0][0]} 
+Sistema Operacional: {query_dados_maquina[0][1]}
 O que você deseja fazer? (digite o comando)
 COMANDOS ACEITOS:
 capOn    | iniciar captura de dados 
@@ -128,7 +160,7 @@ end      | encerrar aplicação
             print("Quantidade de registros inválida... Recomeçando...")
             time.sleep(2)
             continue
-        table = tabulate(executar_query(f"SELECT DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'), cpu, ram, disco FROM Monitoramento ORDER BY hora DESC LIMIT {linhas};"),
+        table = tabulate(executar_query(f"{query_monitoramento} {linhas};"),
         headers=["horário", "cpu(%)", "ram(%)", "disco(%)"], 
         tablefmt="grid"
         )
@@ -149,7 +181,7 @@ end      | encerrar aplicação
         #Montando query com base no número de núcleos da máquina
         for i in range(1, p.cpu_count(logical=True) + 1):
             if i == p.cpu_count(logical=True):
-                query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura GROUP BY hora ORDER BY hora LIMIT {linhas}"
+                query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa} GROUP BY hora ORDER BY hora LIMIT {linhas}"
                 cabecalho.append(f"N{i}")
             else:
                 query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}', "
@@ -169,7 +201,7 @@ end      | encerrar aplicação
         thread.start()
         while moniroramento:
             time.sleep(5)
-            dados = executar_query("SELECT DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'), cpu, ram, disco FROM Monitoramento ORDER BY hora DESC LIMIT 1;")
+            dados = executar_query(f"{query_monitoramento} 1;")
             dados = dados[0]
             if None in dados:
                 continue
