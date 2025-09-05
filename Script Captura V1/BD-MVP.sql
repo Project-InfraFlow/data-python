@@ -78,7 +78,6 @@ CONSTRAINT fkLeituraComponente
 INSERT IGNORE INTO Cliente (tokenEmpresa, nomeEmpresa, cnpj, telefone) VALUES
 	(123456789, 'EmpresaXPTO', '01234567891234', '11975321122');
 
-INSERT IGNORE INTO Componente (idComponente, idMaquina, TokenEmpresa, nomeComponente, UM) VALUES (1, "CPU", "%"), (2, "Memória", "%"), (3, "Disco", "%");
     
 
     
