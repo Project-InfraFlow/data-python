@@ -70,7 +70,7 @@ hora DATETIME NOT NULL,
 condicao VARCHAR(45),
 CONSTRAINT fkLeituraComponente
 	FOREIGN KEY (idComponente) REFERENCES Componente(idComponente),
-	FOREIGN KEY (fkNucleo) REFERENCES nucleoCPU (idNucleoCPU),
+	FOREIGN KEY (fkNucleo) REFERENCES NucleoCPU (idNucleoCPU),
 	FOREIGN KEY (tokenEmpresa) REFERENCES Componente(tokenEmpresa),
 	FOREIGN KEY (idMaquina) REFERENCES Componente(idMaquina)
 );
