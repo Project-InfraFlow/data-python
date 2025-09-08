@@ -10,12 +10,10 @@ import datetime as dt
 from mysql.connector import connect, Error
 from tabulate import tabulate
 from dotenv import load_dotenv
-import keyboard
-
 
 load_dotenv()
 inserir_no_banco = False
-moniroramento = False
+monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
 
@@ -67,7 +65,10 @@ def coletar_e_inserir_dados():
     while inserir_no_banco:
         cpu = p.cpu_percent(interval=10, percpu=True)
         memoria_usada = p.virtual_memory().percent
-        disco_usado = p.disk_usage("C:\\").percent
+        if(os.name == 'nt'):
+            disco_usado = p.disk_usage("C:\\").percent
+        else:
+            disco_usado = p.disk_usage("/").percent
         horario = str(dt.datetime.now())
         lista_memoria = (memoria_usada, disco_usado)
         for i in range(0, len(cpu)):
@@ -90,14 +91,7 @@ def barra_progresso(valor, tipo='percent', tamanho=30):
         preenchido = int((valor / 100) * tamanho)
         barra = "█" * preenchido + "░" * (tamanho - preenchido)
         return f"{barra} {valor:.1f}%"
-    return ""
-
-def parar_monitoramento():
-    global moniroramento
-    while True:
-        if keyboard.is_pressed("q"):
-            moniroramento = False
-            break
+    return ""   
 
 definir_maquina()
 definir_componentes()
@@ -117,9 +111,9 @@ LIMIT"""
 
 query_dados_maquina = executar_query(f"SELECT nomeMaquina, SO FROM Maquina WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa};") 
 
-
-while True:
-    print(f"""
+try:
+    while True:
+        print(f"""
 MVP CAPTURA DE DADOS SPRINT1 - INFRAFLOW
 Nome da Máquina: {query_dados_maquina[0][0]} 
 Sistema Operacional: {query_dados_maquina[0][1]}
@@ -131,96 +125,112 @@ realtime | visualizar dados em tempo real
 view     | visualizar dados capturados 
 viewCPU  | visualizar dados capturados da CPU por núcleo(N)
 end      | encerrar aplicação
-""")
-    comando = input("Comando: ")
-    
-    if comando == "capOn":
-        if inserir_no_banco:
-            print("A captura e inserção já está sendo realizada")
-            time.sleep(2)
-        else:
-            inserir_no_banco = True
-            thread = threading.Thread(target=coletar_e_inserir_dados)
-            thread.start()
-            print("Capturando novos dados e inserindo no banco de dados...")
-        time.sleep(2)
-
-    elif comando == "capOff":
-        if inserir_no_banco:
-            inserir_no_banco = False
-            print("Encerrando captura e inserção de dados...")
-        else:
-            print("A captura e inserção de dados já está desligada")
-        time.sleep(2)   
-
-    elif comando == "view":
-        try:
-            linhas = int(input("Quantos registros exibir?(Do mais recente até o mais antigo) "))
-        except:
-            print("Quantidade de registros inválida... Recomeçando...")
-            time.sleep(2)
-            continue
-        table = tabulate(executar_query(f"{query_monitoramento} {linhas};"),
-        headers=["horário", "cpu(%)", "ram(%)", "disco(%)"], 
-        tablefmt="grid"
-        )
-        print(table)
-        print("Recomeçando...")
-        time.sleep(2)
-     
-    elif comando == "viewCPU":
-        try:
-            linhas = int(input("Quantos registros exibir?(Do mais recente até o mais antigo) "))
-        except:
-            print("Quantidade de registros inválida... Recomeçando...")
-            time.sleep(2)
-            continue
-        query_nucleos = ""
-        cabecalho = ["horário"]
-
-        #Montando query com base no número de núcleos da máquina
-        for i in range(1, p.cpu_count(logical=True) + 1):
-            if i == p.cpu_count(logical=True):
-                query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa} GROUP BY hora ORDER BY hora LIMIT {linhas}"
-                cabecalho.append(f"N{i}")
+    """)
+        comando = input("Comando: ")
+        
+        if comando == "capOn":
+            if query_dados_maquina[0][0] == socket.gethostname():
+                if inserir_no_banco: 
+                    print("A captura e inserção já está sendo realizada")
+                    time.sleep(2)
+                else:
+                    inserir_no_banco = True
+                    thread = threading.Thread(target=coletar_e_inserir_dados)
+                    thread.start()
+                    print("Capturando novos dados e inserindo no banco de dados...")
             else:
-                query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}', "
-                cabecalho.append(f"N{i}")
-        table = tabulate(executar_query(f"SELECT DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'), {query_nucleos}"),
-        headers = cabecalho, 
-        tablefmt="grid"
-        )
-        print(table)
-        print("Recomeçando...")
-        time.sleep(2)
+                print(f"Apenas operações de visualização de dados estão disponíveis\nSomente a máquina cadastrada com ID {id_maquina}: {query_dados_maquina[0][0]} pode realizar capturas")
+            time.sleep(2)
 
-    elif comando == "realtime":
-        print("MONITORAMENTO EM TEMPO REAL - APERTE q PARA VOLTAR AO MENU:")
-        moniroramento = True
-        thread = threading.Thread(target=parar_monitoramento)
-        thread.start()
-        while moniroramento:
-            time.sleep(5)
-            dados = executar_query(f"{query_monitoramento} 1;")
-            dados = dados[0]
-            if None in dados:
+        elif comando == "capOff":
+            if inserir_no_banco:
+                inserir_no_banco = False
+                print("Encerrando captura e inserção de dados...")
+            else:
+                print("A captura e inserção de dados já está desligada")
+            time.sleep(2)   
+
+        elif comando == "view":
+            try:
+                linhas = int(input("Quantos registros exibir?(Do mais recente até o mais antigo) "))
+            except:
+                print("Quantidade de registros inválida... Recomeçando...")
+                time.sleep(2)
                 continue
-            msg = f"\nMomento da Captura: {dados[0]}\n\nCPU:   {barra_progresso(dados[1])}\n\nRAM:   {barra_progresso(dados[2])}\n\nDISCO: {barra_progresso(dados[3])}"
-            print(msg)
-            linhas = msg.count("\n") + 1
-            sys.stdout.write("\033[F" * linhas)  
-            sys.stdout.write("\033[K" * linhas)  
-        print("\n" * linhas)
-        print("Encerrando Monitoramento...")
-        time.sleep(2)
+            table = tabulate(executar_query(f"{query_monitoramento} {linhas};"),
+            headers=["horário", "cpu(%)", "ram(%)", "disco(%)"], 
+            tablefmt="grid"
+            )
+            print(table)
+            print("Recomeçando...")
+            time.sleep(2)
+        
+        elif comando == "viewCPU":
+            try:
+                linhas = int(input("Quantos registros exibir?(Do mais recente até o mais antigo) "))
+            except:
+                print("Quantidade de registros inválida... Recomeçando...")
+                time.sleep(2)
+                continue
+            query_nucleos = ""
+            cabecalho = ["horário"]
 
-    elif comando == "end":
-        if inserir_no_banco:
-            inserir_no_banco = False
-            print("Encerrando captura e inserção de dados...")
-        print("Encerrando Aplicação...")
-        break
+            #Montando query com base no número de núcleos da máquina
+            for i in range(1, p.cpu_count(logical=True) + 1):
+                if i == p.cpu_count(logical=True):
+                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa} GROUP BY hora ORDER BY hora LIMIT {linhas}"
+                    cabecalho.append(f"N{i}")
+                else:
+                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}', "
+                    cabecalho.append(f"N{i}")
+            table = tabulate(executar_query(f"SELECT DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'), {query_nucleos}"),
+            headers = cabecalho, 
+            tablefmt="grid"
+            )
+            print(table)
+            print("Recomeçando...")
+            time.sleep(2)
 
-    else:
-        print("Comando inválido... Recomeçando...")
-        time.sleep(2)
+        elif comando == "realtime":
+            print("MONITORAMENTO EM TEMPO REAL - APERTE CTRL + C PARA SAIR:")
+            monitoramento = True
+            try:
+                linhas = 0
+                while monitoramento:
+                    time.sleep(5)
+                    dados = executar_query(f"{query_monitoramento} 1;")
+                    if dados != []:
+                        dados = dados[0]
+                    else:
+                        print("Não há dados de captura")
+                        monitoramento = False
+                        break
+                    if None in dados:
+                        continue
+                    msg = f"\nMomento da Captura: {dados[0]}\n\nCPU:   {barra_progresso(dados[1])}\n\nRAM:   {barra_progresso(dados[2])}\n\nDISCO: {barra_progresso(dados[3])}"
+                    print(msg)
+                    linhas = msg.count("\n") + 1
+                    sys.stdout.write("\033[F" * linhas)  
+                    sys.stdout.write("\033[K" * linhas)  
+            except:
+                monitoramento = False
+                print("\n" * linhas)
+                print("Encerrando Monitoramento...")
+                time.sleep(2)      
+
+        elif comando == "end":
+            if inserir_no_banco:
+                inserir_no_banco = False
+                print("Encerrando captura e inserção de dados...")
+            print("Encerrando Aplicação...")
+            break
+
+        else:
+            print("Comando inválido... Recomeçando...")
+            time.sleep(2)
+except:
+    if inserir_no_banco:
+        inserir_no_banco = False
+        print("Encerrando captura e inserção de dados...")
+    print("Encerrando Aplicação...")
+
