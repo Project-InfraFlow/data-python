@@ -192,10 +192,10 @@ end      | encerrar aplicação
             time.sleep(2)
 
         elif comando == "realtime":
+            linhas = 0
             print("MONITORAMENTO EM TEMPO REAL - APERTE CTRL + C PARA SAIR:")
             monitoramento = True
             try:
-                linhas = 0
                 while monitoramento:
                     time.sleep(5)
                     dados = executar_query(f"{query_monitoramento} 1;")
@@ -231,6 +231,6 @@ end      | encerrar aplicação
 except:
     if inserir_no_banco:
         inserir_no_banco = False
-        print("Encerrando captura e inserção de dados...")
+        print("\nEncerrando captura e inserção de dados...")
     print("Encerrando Aplicação...")
 
