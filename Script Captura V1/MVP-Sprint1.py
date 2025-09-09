@@ -100,7 +100,7 @@ definir_nucleos()
 query_monitoramento = f"""
 SELECT 
     DATE_FORMAT(hora, '%d/%m/%Y %H:%i:%s'),
-    SUM(CASE WHEN idComponente = 1  THEN (ROUND(dado/(SELECT COUNT(*) FROM NucleoCPU),2)) END) AS "cpu",
+    SUM(CASE WHEN idComponente = 1  THEN (ROUND(dado/(SELECT COUNT(*) FROM NucleoCPU WHERE idMaquina = {id_maquina}),2)) END) AS "cpu",
     MAX(CASE WHEN idComponente = 2  THEN ROUND(dado, 2) END) AS "ram",
     MAX(CASE WHEN idComponente = 3 THEN ROUND(dado, 2) END) AS "disco"
 FROM Leitura
