@@ -16,6 +16,7 @@ CONSTRAINT pkComposta
 nome VARCHAR(45) NOT NULL,
 email VARCHAR(45) NOT NULL,
 senha VARCHAR(45) NOT NULL,
+permisao INT NOT NULL
 CONSTRAINT fkUsuarioCliente
 	FOREIGN KEY (tokenEmpresa) REFERENCES Cliente(tokenEmpresa)
 );
