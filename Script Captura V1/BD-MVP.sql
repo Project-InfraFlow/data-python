@@ -3,9 +3,10 @@ USE Infraflow;
 
 CREATE TABLE IF NOT EXISTS Cliente(
 tokenEmpresa INT PRIMARY KEY,
-nomeEmpresa VARCHAR(45) NOT NULL,
-cnpj VARCHAR(45) NOT NULL,
-telefone VARCHAR(45) NOT NULL
+nomeFantasia VARCHAR(45) NOT NULL,
+razaoSocial VARCHAR(45) NOT NULL,
+cnpj VARCHAR(14) NOT NULL,
+telefone VARCHAR(11) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Usuario(
@@ -16,7 +17,6 @@ CONSTRAINT pkComposta
 nome VARCHAR(45) NOT NULL,
 email VARCHAR(45) NOT NULL,
 senha VARCHAR(45) NOT NULL,
-permissao INT NOT NULL
 CONSTRAINT fkUsuarioCliente
 	FOREIGN KEY (tokenEmpresa) REFERENCES Cliente(tokenEmpresa)
 );
@@ -28,6 +28,8 @@ CONSTRAINT pkCompostra
 	PRIMARY KEY (idMaquina, tokenEmpresa),
 nomeMaquina VARCHAR(45) NOT NULL,
 SO VARCHAR(45) NOT NULL,
+localizacao VARCHAR(45), #Pode ser NULL por enquanto (Mudar em futuras sprints)
+km VARCHAR(10),
 CONSTRAINT fkMaquinaCliente
 	FOREIGN KEY (tokenEmpresa) REFERENCES Cliente(tokenEmpresa)
 );
@@ -39,7 +41,8 @@ tokenEmpresa INT,
 CONSTRAINT pkCompostra
 	PRIMARY KEY (idComponente, idMaquina, tokenEmpresa),
 nomeComponente VARCHAR(45) NOT NULL,
-UM VARCHAR(10) NOT NULL,
+UnidadeDeMedida VARCHAR(10) NOT NULL,
+parametro FLOAT NOT NULL,
 CONSTRAINT fkComponenteMaquina
 	FOREIGN KEY (tokenEmpresa) REFERENCES Maquina(tokenEmpresa),
 	FOREIGN KEY (idMaquina) REFERENCES Maquina(idMaquina)
@@ -65,10 +68,9 @@ idMaquina INT,
 tokenEmpresa INT,
 CONSTRAINT pkCompostra
 	PRIMARY KEY (idLeitura, idComponente, idMaquina, tokenEmpresa),
-fkNucleo INT DEFAULT NULL,
+fkNucleo INT,
 dado FLOAT NOT NULL,
-hora DATETIME NOT NULL,
-condicao VARCHAR(45),
+dthCaptura DATETIME NOT NULL,
 CONSTRAINT fkLeituraComponente
 	FOREIGN KEY (idComponente) REFERENCES Componente(idComponente),
 	FOREIGN KEY (fkNucleo) REFERENCES NucleoCPU (idNucleoCPU),
@@ -76,10 +78,27 @@ CONSTRAINT fkLeituraComponente
 	FOREIGN KEY (idMaquina) REFERENCES Componente(idMaquina)
 );
 
-INSERT IGNORE INTO Cliente (tokenEmpresa, nomeEmpresa, cnpj, telefone) VALUES
-	(123456789, 'EmpresaXPTO', '01234567891234', '11975321122');
+CREATE TABLE IF NOT EXISTS Alerta(
+idAlerta INT AUTO_INCREMENT,
+idLeitura INT,
+idComponente INT,
+idMaquina INT,
+tokenEmpresa INT,
+CONSTRAINT pkComposta
+	PRIMARY KEY (idAlerta, idLeitura, idComponente, idMaquina, tokenEmpresa),
+CONSTRAINT fkAlertaLeitura
+	FOREIGN KEY (idLeitura) REFERENCES Leitura(idLeitura),
+	FOREIGN KEY (idComponente) REFERENCES Leitura(idComponente),
+	FOREIGN KEY (tokenEmpresa) REFERENCES Leitura(tokenEmpresa),
+	FOREIGN KEY (idMaquina) REFERENCES Leitura(idMaquina)
+);
+
+INSERT IGNORE INTO Cliente (tokenEmpresa, nomeFantasia, razaoSocial, cnpj, telefone) VALUES
+	(123456789, 'XPTO', 'EmpresaXPTO', '01234567891234', '11975321122');
+    
 
     
+
 
     
     
