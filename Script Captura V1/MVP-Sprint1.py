@@ -11,7 +11,7 @@ from mysql.connector import connect, Error
 from tabulate import tabulate
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)  # garante que o .env do diretório atual seja lido e sobrescreva o ambiente
 inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
@@ -21,6 +21,7 @@ config = {
       'user': os.getenv("USER_DB"),
       'password': os.getenv("PASSWORD_DB"),
       'host': os.getenv("HOST_DB"),
+      'port': int(os.getenv("PORT_DB", "3306")),  # <— acrescentado
       'database': os.getenv("DATABASE_DB")
     }
 
@@ -58,7 +59,6 @@ def definir_nucleos():
     nucleos_fisicos = p.cpu_count(logical=True)
     for i in range(1, nucleos_fisicos + 1):
         executar_query(f"INSERT IGNORE INTO NucleoCPU (idNucleoCPU, idMaquina, TokenEmpresa, idCPU) VALUES ({i}, {id_maquina}, {token_empresa}, 1)")
-
 
 def coletar_e_inserir_dados():
     global inserir_no_banco, token_empresa, id_maquina
@@ -225,4 +225,3 @@ except:
         inserir_no_banco = False
         print("\nEncerrando captura e inserção de dados...")
     print("Encerrando Aplicação...")
-

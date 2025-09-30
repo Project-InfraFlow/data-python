@@ -43,9 +43,9 @@ CONSTRAINT pkCompostra
 nomeComponente VARCHAR(45) NOT NULL,
 UnidadeDeMedida VARCHAR(10) NOT NULL,
 parametro FLOAT NOT NULL,
-CONSTRAINT fkComponenteMaquina
-	FOREIGN KEY (tokenEmpresa) REFERENCES Maquina(tokenEmpresa),
-	FOREIGN KEY (idMaquina) REFERENCES Maquina(idMaquina)
+CONSTRAINT fk_componente_maquina
+    FOREIGN KEY (idMaquina, tokenEmpresa)
+    REFERENCES Maquina (idMaquina, tokenEmpresa)
 );
 
 CREATE TABLE IF NOT EXISTS NucleoCPU(
@@ -55,10 +55,9 @@ idMaquina INT,
 tokenEmpresa INT,
 CONSTRAINT pkCompostra
 	PRIMARY KEY (idNucleoCPU, idCPU, idMaquina, tokenEmpresa),
-CONSTRAINT fkNucleoCPUComponente
-	FOREIGN KEY (IdCPU) REFERENCES Componente(idComponente),
-	FOREIGN KEY (tokenEmpresa) REFERENCES Componente(tokenEmpresa),
-	FOREIGN KEY (idMaquina) REFERENCES Componente(idMaquina)
+CONSTRAINT fk_nucleocpu_componente
+    FOREIGN KEY (idCPU, idMaquina, tokenEmpresa)
+    REFERENCES Componente (idComponente, idMaquina, tokenEmpresa)
 );
 
 CREATE TABLE IF NOT EXISTS Leitura(
@@ -86,25 +85,53 @@ idMaquina INT,
 tokenEmpresa INT,
 CONSTRAINT pkComposta
 	PRIMARY KEY (idAlerta, idLeitura, idComponente, idMaquina, tokenEmpresa),
-CONSTRAINT fkAlertaLeitura
-	FOREIGN KEY (idLeitura) REFERENCES Leitura(idLeitura),
-	FOREIGN KEY (idComponente) REFERENCES Leitura(idComponente),
-	FOREIGN KEY (tokenEmpresa) REFERENCES Leitura(tokenEmpresa),
-	FOREIGN KEY (idMaquina) REFERENCES Leitura(idMaquina)
+CONSTRAINT fk_alerta_leitura
+    FOREIGN KEY (idLeitura, idComponente, idMaquina, tokenEmpresa)
+    REFERENCES Leitura (idLeitura, idComponente, idMaquina, tokenEmpresa)
 );
 
 INSERT IGNORE INTO Cliente (tokenEmpresa, nomeFantasia, razaoSocial, cnpj, telefone) VALUES
 	(123456789, 'XPTO', 'EmpresaXPTO', '01234567891234', '11975321122');
     
+    
+    
+    
+-- Select Wiew
+
+SELECT 
+    DATE_FORMAT(l.dthCaptura, '%d/%m/%Y %H:%i:%s') AS horario,
+    SUM(
+        CASE 
+            WHEN l.idComponente = 1 
+            THEN ROUND(l.dado / (
+                SELECT COUNT(*) 
+                FROM NucleoCPU n 
+                WHERE n.idMaquina = l.idMaquina 
+                  AND n.tokenEmpresa = l.tokenEmpresa
+            ), 2)
+        END
+    ) AS cpu,
+    MAX(
+        CASE 
+            WHEN l.idComponente = 2 
+            THEN ROUND(l.dado, 2)
+        END
+    ) AS ram,
+    MAX(
+        CASE 
+            WHEN l.idComponente = 3 
+            THEN ROUND(l.dado, 2)
+        END
+    ) AS disco
+FROM Leitura l
+WHERE l.idMaquina = 1                 -- coloque aqui o ID da máquina que quer consultar
+  AND l.tokenEmpresa = 123456789      -- coloque aqui o token da empresa
+GROUP BY l.dthCaptura
+ORDER BY l.dthCaptura DESC
+LIMIT 10;                             -- ajuste a quantidade de registros que quer ver
 
     
 
-
-    
-    
-
-    
-    
 
     
 
