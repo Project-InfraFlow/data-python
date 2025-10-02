@@ -11,19 +11,19 @@ from mysql.connector import connect, Error
 from tabulate import tabulate
 from dotenv import load_dotenv
 
-load_dotenv(override=True)  # garante que o .env do diretório atual seja lido e sobrescreva o ambiente
+load_dotenv(override=True)  
 inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
 
 config = {
-      'user': os.getenv("USER_DB"),
-      'password': os.getenv("PASSWORD_DB"),
-      'host': os.getenv("HOST_DB"),
-      'port': int(os.getenv("PORT_DB", "3306")),  # <— acrescentado
-      'database': os.getenv("DATABASE_DB")
-    }
+    'user': os.getenv("USER_DB"),
+    'password': os.getenv("PASSWORD_DB"),
+    'host': os.getenv("HOST_DB"),
+    'port': int(os.getenv("PORT_DB", "3306")),
+    'database': os.getenv("DATABASE_DB")
+}
 
 def executar_query(query):
     global config
@@ -48,17 +48,17 @@ def executar_query(query):
 
 def definir_maquina():
     global token_empresa, id_maquina
-    executar_query(f"INSERT IGNORE INTO Maquina (idMaquina, TokenEmpresa, nomeMaquina, SO) VALUES ({id_maquina}, {token_empresa}, '{socket.gethostname()}', '{platform.platform()}');")
+    executar_query(f"INSERT IGNORE INTO maquina (id_maquina, fk_token_empresa, nome_maquina, so, localizacao, km) VALUES ({id_maquina}, {token_empresa}, '{socket.gethostname()}', '{platform.platform()}', 'São Caetano do Sul', '50');")
 
 def definir_componentes():
     global token_empresa, id_maquina
-    executar_query(f"INSERT IGNORE INTO Componente (idComponente, idMaquina, TokenEmpresa, nomeComponente, unidadeDeMedida, parametro) VALUES (1, {id_maquina}, {token_empresa}, 'CPU', '%', 80), (2, {id_maquina}, {token_empresa}, 'Memória', '%', 80), (3, {id_maquina}, {token_empresa}, 'Disco', '%', 80);")
+    executar_query(f"INSERT IGNORE INTO componente (id_componente, fk_id_maquina, fk_token_empresa, nome_componente, unidade_de_medida)  VALUES (1, {id_maquina}, {token_empresa}, 'CPU', '%'), (2, {id_maquina}, {token_empresa}, 'RAM', '%'), (3, {id_maquina}, {token_empresa}, 'Disco', '%');")
 
 def definir_nucleos():
     global token_empresa, id_maquina
     nucleos_fisicos = p.cpu_count(logical=True)
     for i in range(1, nucleos_fisicos + 1):
-        executar_query(f"INSERT IGNORE INTO NucleoCPU (idNucleoCPU, idMaquina, TokenEmpresa, idCPU) VALUES ({i}, {id_maquina}, {token_empresa}, 1)")
+        executar_query(f" INSERT IGNORE INTO nucleo_cpu (id_nucleo, fk_id_componente, fk_id_maquina, fk_token_empresa) VALUES ({i}, 1, {id_maquina}, {token_empresa});")
 
 def coletar_e_inserir_dados():
     global inserir_no_banco, token_empresa, id_maquina
@@ -71,11 +71,12 @@ def coletar_e_inserir_dados():
             disco_usado = p.disk_usage("/").percent
         horario = str(dt.datetime.now())
         lista_memoria = (memoria_usada, disco_usado)
+        
         for i in range(0, len(cpu)):
-            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, dthCaptura, fkNucleo) VALUES (1,  {id_maquina}, {token_empresa}, {cpu[i]}, '{horario}', {i + 1})")
+            executar_query(f"INSERT INTO  leitura (fk_id_componente, fk_id_maquina, fk_token_empresa, dados, data_hora_captura, id_nucleo) VALUES (1, {id_maquina}, {token_empresa}, {cpu[i]}, '{horario}', {i + 1});")
 
         for i in range(0, len(lista_memoria)):
-            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, dthCaptura) VALUES ({i + 2},  {id_maquina}, {token_empresa}, {lista_memoria[i]}, '{horario}')")
+            executar_query(f"INSERT INTO leitura (fk_id_componente, fk_id_maquina, fk_token_empresa, dados, data_hora_captura) VALUES ({i + 2}, {id_maquina}, {token_empresa}, {lista_memoria[i]}, '{horario}');")
     
 def barra_progresso(valor, tipo='percent', tamanho=30):
     if tipo == 'percent':
@@ -91,17 +92,17 @@ definir_nucleos()
 
 query_monitoramento = f"""
 SELECT 
-    DATE_FORMAT(dthCaptura, '%d/%m/%Y %H:%i:%s'),
-    SUM(CASE WHEN idComponente = 1  THEN (ROUND(dado/(SELECT COUNT(*) FROM NucleoCPU WHERE idMaquina = {id_maquina}),2)) END) AS "cpu",
-    MAX(CASE WHEN idComponente = 2  THEN ROUND(dado, 2) END) AS "ram",
-    MAX(CASE WHEN idComponente = 3 THEN ROUND(dado, 2) END) AS "disco"
-FROM Leitura
-WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa}
-GROUP BY dthCaptura
-ORDER BY dthCaptura DESC
+    DATE_FORMAT(data_hora_captura, '%d/%m/%Y %H:%i:%s'),
+    SUM(CASE WHEN fk_id_componente = 1 THEN (ROUND(dados/(SELECT COUNT(*) FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina}),2)) END) AS "cpu",
+    MAX(CASE WHEN fk_id_componente = 2  THEN ROUND(dados, 2) END) AS "ram",
+    MAX(CASE WHEN fk_id_componente = 3  THEN ROUND(dados, 2) END) AS "disco"
+FROM leitura
+WHERE fk_id_maquina = {id_maquina} AND fk_token_empresa = {token_empresa}
+GROUP BY data_hora_captura
+ORDER BY data_hora_captura DESC
 LIMIT"""
 
-query_dados_maquina = executar_query(f"SELECT nomeMaquina, SO FROM Maquina WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa};") 
+query_dados_maquina = executar_query(f"SELECT nome_maquina, so FROM maquina WHERE id_maquina = {id_maquina} AND fk_token_empresa = {token_empresa};") 
 
 try:
     while True:
@@ -149,8 +150,9 @@ end      | encerrar aplicação
                 print("Quantidade de registros inválida... Recomeçando...")
                 time.sleep(2)
                 continue
-            table = tabulate(executar_query(f"{query_monitoramento} {linhas};"),
-            headers=["horário", "cpu(%)", "ram(%)", "disco(%)"], 
+            table = tabulate(
+                executar_query(f"{query_monitoramento} {linhas};"),
+                headers=["horário", "cpu(%)", "ram(%)", "disco(%)"], 
             tablefmt="grid"
             )
             print(table)
@@ -164,21 +166,25 @@ end      | encerrar aplicação
                 print("Quantidade de registros inválida... Recomeçando...")
                 time.sleep(2)
                 continue
-            query_nucleos = ""
-            cabecalho = ["horário"]
 
-            #Montando query com base no número de núcleos da máquina
-            for i in range(1, p.cpu_count(logical=True) + 1):
-                if i == p.cpu_count(logical=True):
-                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa} GROUP BY dthCaptura ORDER BY dthCaptura LIMIT {linhas}"
-                    cabecalho.append(f"N{i}")
-                else:
-                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}', "
-                    cabecalho.append(f"N{i}")
-            table = tabulate(executar_query(f"SELECT DATE_FORMAT(dthCaptura, '%d/%m/%Y %H:%i:%s'), {query_nucleos}"),
-            headers = cabecalho, 
-            tablefmt="grid"
-            )
+            nucleos = p.cpu_count(logical=True)
+            cabecalho = ["horário"]
+            query_campos = []
+
+            for i in range(1, nucleos + 1):
+                query_campos.append(f"MAX(CASE WHEN id_nucleo = {i} THEN ROUND(dados,2) END) AS 'Núcleo_{i}'")
+                cabecalho.append(f"N{i}")
+
+            query_cpu = f"""
+                SELECT DATE_FORMAT(data_hora_captura, '%d/%m/%Y %H:%i:%s'), {', '.join(query_campos)}
+                FROM leitura
+                WHERE fk_id_maquina = {id_maquina} AND fk_token_empresa = {token_empresa} AND fk_id_componente = 1
+                GROUP BY data_hora_captura
+                ORDER BY data_hora_captura DESC
+                LIMIT {linhas};
+            """
+
+            table = tabulate(executar_query(query_cpu), headers=cabecalho, tablefmt="grid")
             print(table)
             print("Recomeçando...")
             time.sleep(2)
@@ -220,7 +226,8 @@ end      | encerrar aplicação
         else:
             print("Comando inválido... Recomeçando...")
             time.sleep(2)
-except:
+            
+except: 
     if inserir_no_banco:
         inserir_no_banco = False
         print("\nEncerrando captura e inserção de dados...")
