@@ -48,20 +48,40 @@ def executar_query(query):
 
 def definir_maquina():
     global token_empresa, id_maquina
-    executar_query(f"INSERT IGNORE INTO Maquina (idMaquina, TokenEmpresa, nomeMaquina, SO) VALUES ({id_maquina}, {token_empresa}, '{socket.gethostname()}', '{platform.platform()}');")
+    executar_query(
+        f"""INSERT INTO maquina (id_maquina, fk_empresa_maquina, nome_maquina, so, localizacao, km)
+            VALUES ({id_maquina}, {token_empresa}, '{socket.gethostname()}', '{platform.platform()}', 'N/A', 'N/A')
+            ON DUPLICATE KEY UPDATE
+              nome_maquina=VALUES(nome_maquina),
+              so=VALUES(so),
+              fk_empresa_maquina=VALUES(fk_empresa_maquina);"""
+    )
 
 def definir_componentes():
     global token_empresa, id_maquina
-    executar_query(f"INSERT IGNORE INTO Componente (idComponente, idMaquina, TokenEmpresa, nomeComponente, unidadeDeMedida, parametro) VALUES (1, {id_maquina}, {token_empresa}, 'CPU', '%', 80), (2, {id_maquina}, {token_empresa}, 'Memória', '%', 80), (3, {id_maquina}, {token_empresa}, 'Disco', '%', 80);")
+    executar_query(f"INSERT IGNORE INTO componente (fk_id_maquina, nome_componente, unidade_de_medida) VALUES ({id_maquina}, 'CPU', '%'), ({id_maquina}, 'RAM', '%'), ({id_maquina}, 'Disco', '%');")
 
 def definir_nucleos():
     global token_empresa, id_maquina
     nucleos_fisicos = p.cpu_count(logical=True)
-    for i in range(1, nucleos_fisicos + 1):
-        executar_query(f"INSERT IGNORE INTO NucleoCPU (idNucleoCPU, idMaquina, TokenEmpresa, idCPU) VALUES ({i}, {id_maquina}, {token_empresa}, 1)")
+    # obter id do componente CPU para esta máquina
+    id_cpu_comp = executar_query(f"SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente = 'CPU';")
+    if not id_cpu_comp:
+        return
+    id_cpu_comp = id_cpu_comp[0][0]
+    for _ in range(1, nucleos_fisicos + 1):
+        executar_query(f"INSERT IGNORE INTO nucleo_cpu (fk_id_componente, fk_id_maquina) VALUES ({id_cpu_comp}, {id_maquina})")
 
 def coletar_e_inserir_dados():
     global inserir_no_banco, token_empresa, id_maquina
+    # capturar ids dos componentes
+    comp_rows = executar_query(f"SELECT nome_componente, id_componente FROM componente WHERE fk_id_maquina = {id_maquina}")
+    comp_map = {nome: cid for (nome, cid) in comp_rows}
+    id_cpu_comp = comp_map.get('CPU')
+    id_ram_comp = comp_map.get('RAM')
+    id_disco_comp = comp_map.get('Disco')
+    # capturar ids dos núcleos desta máquina (em ordem)
+    nucleos_ids = [row[0] for row in executar_query(f"SELECT id_nucleo FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina} ORDER BY id_nucleo")]
     while inserir_no_banco:
         cpu = p.cpu_percent(interval=10, percpu=True)
         memoria_usada = p.virtual_memory().percent
@@ -72,10 +92,14 @@ def coletar_e_inserir_dados():
         horario = str(dt.datetime.now())
         lista_memoria = (memoria_usada, disco_usado)
         for i in range(0, len(cpu)):
-            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, dthCaptura, fkNucleo) VALUES (1,  {id_maquina}, {token_empresa}, {cpu[i]}, '{horario}', {i + 1})")
+            id_nucleo_ref = nucleos_ids[i] if i < len(nucleos_ids) else "NULL"
+            executar_query(f"INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, data_hora_captura, id_nucleo) VALUES ({id_cpu_comp}, {id_maquina}, {cpu[i]}, '{horario}', {id_nucleo_ref})")
 
-        for i in range(0, len(lista_memoria)):
-            executar_query(f"INSERT INTO Leitura (idComponente, idMaquina, TokenEmpresa, dado, dthCaptura) VALUES ({i + 2},  {id_maquina}, {token_empresa}, {lista_memoria[i]}, '{horario}')")
+        # RAM (2) e Disco (3)
+        if id_ram_comp is not None:
+            executar_query(f"INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, data_hora_captura) VALUES ({id_ram_comp}, {id_maquina}, {lista_memoria[0]}, '{horario}')")
+        if id_disco_comp is not None:
+            executar_query(f"INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, data_hora_captura) VALUES ({id_disco_comp}, {id_maquina}, {lista_memoria[1]}, '{horario}')")
     
 def barra_progresso(valor, tipo='percent', tamanho=30):
     if tipo == 'percent':
@@ -91,17 +115,20 @@ definir_nucleos()
 
 query_monitoramento = f"""
 SELECT 
-    DATE_FORMAT(dthCaptura, '%d/%m/%Y %H:%i:%s'),
-    SUM(CASE WHEN idComponente = 1  THEN (ROUND(dado/(SELECT COUNT(*) FROM NucleoCPU WHERE idMaquina = {id_maquina}),2)) END) AS "cpu",
-    MAX(CASE WHEN idComponente = 2  THEN ROUND(dado, 2) END) AS "ram",
-    MAX(CASE WHEN idComponente = 3 THEN ROUND(dado, 2) END) AS "disco"
-FROM Leitura
-WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa}
-GROUP BY dthCaptura
-ORDER BY dthCaptura DESC
+    DATE_FORMAT(data_hora_captura, '%d/%m/%Y %H:%i:%s'),
+    SUM(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='CPU' LIMIT 1)
+         THEN (ROUND(dados_float/(SELECT COUNT(*) FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina}),2)) END) AS "cpu",
+    MAX(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='RAM' LIMIT 1)
+         THEN ROUND(dados_float, 2) END) AS "ram",
+    MAX(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='Disco' LIMIT 1)
+         THEN ROUND(dados_float, 2) END) AS "disco"
+FROM leitura
+WHERE fk_id_maquina = {id_maquina}
+GROUP BY data_hora_captura
+ORDER BY data_hora_captura DESC
 LIMIT"""
 
-query_dados_maquina = executar_query(f"SELECT nomeMaquina, SO FROM Maquina WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa};") 
+query_dados_maquina = executar_query(f"SELECT nome_maquina, so FROM maquina WHERE id_maquina = {id_maquina} AND fk_empresa_maquina = {token_empresa};") 
 
 try:
     while True:
@@ -164,20 +191,28 @@ end      | encerrar aplicação
                 print("Quantidade de registros inválida... Recomeçando...")
                 time.sleep(2)
                 continue
-            query_nucleos = ""
-            cabecalho = ["horário"]
 
-            #Montando query com base no número de núcleos da máquina
-            for i in range(1, p.cpu_count(logical=True) + 1):
-                if i == p.cpu_count(logical=True):
-                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}' FROM Leitura WHERE idMaquina = {id_maquina} AND TokenEmpresa = {token_empresa} GROUP BY dthCaptura ORDER BY dthCaptura LIMIT {linhas}"
-                    cabecalho.append(f"N{i}")
-                else:
-                    query_nucleos = query_nucleos + f"MAX(CASE WHEN fkNucleo = {i} THEN CONCAT(ROUND(dado, 2), '%') END) AS 'Núcleo_{i}', "
-                    cabecalho.append(f"N{i}")
-            table = tabulate(executar_query(f"SELECT DATE_FORMAT(dthCaptura, '%d/%m/%Y %H:%i:%s'), {query_nucleos}"),
-            headers = cabecalho, 
-            tablefmt="grid"
+            # mapear ids dos núcleos desta máquina (ordem)
+            nucleos_ids = [row[0] for row in executar_query(f"SELECT id_nucleo FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina} ORDER BY id_nucleo")]
+            cabecalho = ["horário"] + [f"N{i+1}" for i in range(len(nucleos_ids))]
+
+            # id do componente CPU
+            id_cpu_comp = executar_query(f"SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='CPU' LIMIT 1;")
+            id_cpu_comp = id_cpu_comp[0][0] if id_cpu_comp else 0
+
+            seletores = []
+            for idx, nid in enumerate(nucleos_ids, start=1):
+                seletores.append(f"MAX(CASE WHEN id_nucleo = {nid} AND fk_id_componente = {id_cpu_comp} THEN CONCAT(ROUND(dados_float, 2), '%') END) AS 'Núcleo_{idx}'")
+            seletores_sql = ", ".join(seletores)
+
+            table = tabulate(
+                executar_query(
+                    f"SELECT DATE_FORMAT(data_hora_captura, '%d/%m/%Y %H:%i:%s'), {seletores_sql} "
+                    f"FROM leitura WHERE fk_id_maquina = {id_maquina} "
+                    f"GROUP BY data_hora_captura ORDER BY data_hora_captura DESC LIMIT {linhas}"
+                ),
+                headers=cabecalho, 
+                tablefmt="grid"
             )
             print(table)
             print("Recomeçando...")
