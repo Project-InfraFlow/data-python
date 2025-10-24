@@ -59,7 +59,13 @@ def definir_maquina():
 
 def definir_componentes():
     global token_empresa, id_maquina
-    executar_query(f"INSERT IGNORE INTO componente (fk_id_maquina, nome_componente, unidade_de_medida) VALUES ({id_maquina}, 'CPU', '%'), ({id_maquina}, 'RAM', '%'), ({id_maquina}, 'Disco', '%');")
+    existentes = executar_query(f"SELECT nome_componente FROM componente WHERE fk_id_maquina = {id_maquina};")
+    existentes = [row[0] for row in existentes]
+    padrao = ['CPU', 'RAM', 'Disco']
+
+    for comp in padrao:
+        if comp not in existentes:
+            executar_query(f"INSERT INTO componente (fk_id_maquina, nome_componente, unidade_de_medida) VALUES ({id_maquina}, '{comp}', '%');")
 
 def definir_nucleos():
     global token_empresa, id_maquina
@@ -68,9 +74,16 @@ def definir_nucleos():
     id_cpu_comp = executar_query(f"SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente = 'CPU';")
     if not id_cpu_comp:
         return
-    id_cpu_comp = id_cpu_comp[0][0]
-    for _ in range(1, nucleos_fisicos + 1):
-        executar_query(f"INSERT IGNORE INTO nucleo_cpu (fk_id_componente, fk_id_maquina) VALUES ({id_cpu_comp}, {id_maquina})")
+    id_cpu_comp = id_cpu_comp[0][0] 
+    nucleos_existentes = executar_query(
+        f"SELECT COUNT(*) FROM nucleo_cpu WHERE fk_id_componente = {id_cpu_comp} AND fk_id_maquina = {id_maquina};"
+    )
+    total_existentes = nucleos_existentes[0][0] if nucleos_existentes else 0
+
+    for _ in range(total_existentes + 1, nucleos_fisicos + 1):
+        executar_query(
+            f"INSERT INTO nucleo_cpu (fk_id_componente, fk_id_maquina) VALUES ({id_cpu_comp}, {id_maquina});"
+        )
 
 def coletar_e_inserir_dados():
     global inserir_no_banco, token_empresa, id_maquina
@@ -115,17 +128,15 @@ definir_nucleos()
 
 query_monitoramento = f"""
 SELECT 
-    DATE_FORMAT(data_hora_captura, '%d/%m/%Y %H:%i:%s'),
-    SUM(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='CPU' LIMIT 1)
-         THEN (ROUND(dados_float/(SELECT COUNT(*) FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina}),2)) END) AS "cpu",
-    MAX(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='RAM' LIMIT 1)
-         THEN ROUND(dados_float, 2) END) AS "ram",
-    MAX(CASE WHEN fk_id_componente = (SELECT id_componente FROM componente WHERE fk_id_maquina = {id_maquina} AND nome_componente='Disco' LIMIT 1)
-         THEN ROUND(dados_float, 2) END) AS "disco"
-FROM leitura
-WHERE fk_id_maquina = {id_maquina}
-GROUP BY data_hora_captura
-ORDER BY data_hora_captura DESC
+    DATE_FORMAT(l.data_hora_captura, '%d/%m/%Y %H:%i:%s') AS horario,
+    SUM(CASE WHEN c.nome_componente = 'CPU' THEN ROUND(l.dados_float / (SELECT COUNT(*) FROM nucleo_cpu WHERE fk_id_maquina = l.fk_id_maquina), 2) ELSE 0 END) AS cpu,
+    MAX(CASE WHEN c.nome_componente = 'RAM' THEN ROUND(l.dados_float, 2) END) AS ram,
+    MAX(CASE WHEN c.nome_componente = 'Disco' THEN ROUND(l.dados_float, 2) END) AS disco
+FROM leitura l
+JOIN componente c ON l.fk_id_componente = c.id_componente
+WHERE l.fk_id_maquina = 1
+GROUP BY l.data_hora_captura
+ORDER BY l.data_hora_captura DESC
 LIMIT"""
 
 query_dados_maquina = executar_query(f"SELECT nome_maquina, so FROM maquina WHERE id_maquina = {id_maquina} AND fk_empresa_maquina = {token_empresa};") 
