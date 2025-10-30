@@ -29,22 +29,23 @@ def executar_query(query):
     global config
     try:
         db = connect(**config)
-        if db.is_connected():            
+        if db.is_connected():
             with db.cursor() as cursor:
                 cursor.execute(query)
-                resultado = cursor.fetchall() 
+
+                # só tenta fetchall se for um SELECT
+                if query.strip().lower().startswith("select"):
+                    resultado = cursor.fetchall()
+                else:
+                    resultado = None
+
                 db.commit()
 
-            
-            cursor.close()
             db.close()
             return resultado
-    
     except Error as e:
-        print('Error to connect with MySQL -', e) 
-        print("Erro ao se conectar com o Banco de dados... Encerrando Aplicação...")
+        print('Erro ao conectar ou executar query:', e)
         time.sleep(2)
-        sys.exit(1)
 
 def definir_maquina():
     global token_empresa, id_maquina
