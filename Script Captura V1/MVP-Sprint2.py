@@ -18,7 +18,7 @@ inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 NOME_PORTICO = "Pórtico - INFRA-EDGE-01-Itápolis (SP-333)"
 
 config = {
