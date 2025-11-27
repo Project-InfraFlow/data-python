@@ -12,13 +12,14 @@ from tabulate import tabulate
 from dotenv import load_dotenv
 import urllib.request
 import json
+from flask import Flask, jsonify
 
 load_dotenv(override=True)
 inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 NOME_PORTICO = "Pórtico - INFRA-EDGE-01-Itápolis (SP-333)"
 
 config = {
@@ -28,6 +29,8 @@ config = {
       'port': int(os.getenv("PORT_DB", "3306")),
       'database': os.getenv("DATABASE_DB")
     }
+
+app = Flask(__name__)
 
 def enviar_alerta_slack(mensagem: str):
     global SLACK_WEBHOOK_URL
@@ -98,6 +101,58 @@ def definir_nucleos():
             f"INSERT INTO nucleo_cpu (fk_id_componente, fk_id_maquina) VALUES ({id_cpu_comp}, {id_maquina});"
         )
 
+def inserir_alerta(componente_id, descricao, status=1):
+    parametro = executar_query("SELECT id_parametro_alerta FROM parametro_alerta LIMIT 1")
+    if parametro:
+        parametro_id = parametro[0][0]
+        leitura = executar_query(f"""
+            SELECT id_leitura FROM leitura 
+            WHERE fk_id_componente = {componente_id} 
+            ORDER BY data_hora_captura DESC LIMIT 1
+        """)
+        if leitura:
+            leitura_id = leitura[0][0]
+            executar_query(f"""
+                INSERT INTO alerta (fk_id_leitura, fk_id_componente, fk_parametro_alerta, descricao, status_alerta)
+                VALUES ({leitura_id}, {componente_id}, {parametro_id}, '{descricao}', {status})
+            """)
+
+@app.route('/alertas/operacionais', methods=['GET'])
+def get_alertas_operacionais():
+    try:
+        db = connect(**config)
+        if db.is_connected():
+            with db.cursor() as cursor:
+                query = """
+                SELECT 
+                    a.descricao as mensagem,
+                    l.data_hora_captura as timestamp,
+                    c.nome_componente as origem
+                FROM alerta a
+                JOIN leitura l ON a.fk_id_leitura = l.id_leitura
+                JOIN componente c ON a.fk_id_componente = c.id_componente
+                WHERE l.data_hora_captura >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                ORDER BY l.data_hora_captura DESC
+                LIMIT 50
+                """
+                cursor.execute(query)
+                alertas = cursor.fetchall()
+                
+                alertas_formatados = []
+                for alerta in alertas:
+                    alertas_formatados.append({
+                        'mensagem': alerta[0],
+                        'timestamp': alerta[1].isoformat() if alerta[1] else None,
+                        'origem': alerta[2]
+                    })
+                
+                db.close()
+                return jsonify(alertas_formatados)
+                
+    except Error as e:
+        print('Erro ao buscar alertas operacionais:', e)
+        return jsonify([])
+
 def coletar_dados():
     global token_empresa, id_maquina
     comp_rows = executar_query(f"SELECT nome_componente, id_componente FROM componente WHERE fk_id_maquina = {id_maquina}")
@@ -135,56 +190,59 @@ def coletar_dados():
 
             max_cpu = max(cpu) if cpu else 0.0
 
+            # CPU
             if max_cpu > 95:
-                enviar_alerta_slack(
-                    f"[CRÍTICO] CPU acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
-                )
+                mensagem = f"[CRÍTICO] CPU acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_cpu_comp, mensagem)
             elif max_cpu > 85:
-                enviar_alerta_slack(
-                    f"[ALTA] CPU acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
-                )
+                mensagem = f"[ALTA] CPU acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_cpu_comp, mensagem)
             elif max_cpu > 70:
-                enviar_alerta_slack(
-                    f"[ATENÇÃO] CPU acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
-                )
+                mensagem = f"[ATENÇÃO] CPU acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_cpu_comp, mensagem)
             elif max_cpu > 50:
-                enviar_alerta_slack(
-                    f"[MONITORAR] CPU acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
-                )
+                mensagem = f"[MONITORAR] CPU acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {max_cpu:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_cpu_comp, mensagem)
 
+            # Memória
             if memoria_usada > 95:
-                enviar_alerta_slack(
-                    f"[CRÍTICO] Memória acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
-                )
+                mensagem = f"[CRÍTICO] Memória acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_ram_comp, mensagem)
             elif memoria_usada > 85:
-                enviar_alerta_slack(
-                    f"[ALTA] Memória acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
-                )
+                mensagem = f"[ALTA] Memória acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_ram_comp, mensagem)
             elif memoria_usada > 70:
-                enviar_alerta_slack(
-                    f"[ATENÇÃO] Memória acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
-                )
+                mensagem = f"[ATENÇÃO] Memória acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_ram_comp, mensagem)
             elif memoria_usada > 50:
-                enviar_alerta_slack(
-                    f"[MONITORAR] Memória acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
-                )
+                mensagem = f"[MONITORAR] Memória acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {memoria_usada:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_ram_comp, mensagem)
 
+            # Disco
             if disco_usado > 95:
-                enviar_alerta_slack(
-                    f"[CRÍTICO] Disco acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
-                )
+                mensagem = f"[CRÍTICO] Disco acima de 95% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_disco_comp, mensagem)
             elif disco_usado > 85:
-                enviar_alerta_slack(
-                    f"[ALTA] Disco acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
-                )
+                mensagem = f"[ALTA] Disco acima de 85% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_disco_comp, mensagem)
             elif disco_usado > 70:
-                enviar_alerta_slack(
-                    f"[ATENÇÃO] Disco acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
-                )
+                mensagem = f"[ATENÇÃO] Disco acima de 70% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_disco_comp, mensagem)
             elif disco_usado > 50:
-                enviar_alerta_slack(
-                    f"[MONITORAR] Disco acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
-                )
+                mensagem = f"[MONITORAR] Disco acima de 50% no {NOME_PORTICO} (id {id_maquina}). Valor atual: {disco_usado:.2f}%."
+                enviar_alerta_slack(mensagem)
+                inserir_alerta(id_disco_comp, mensagem)
 
             print(f" Dados inseridos às {horario}")
         except KeyboardInterrupt:
@@ -199,4 +257,13 @@ if __name__ == "__main__":
     definir_maquina()
     definir_componentes()
     definir_nucleos()
+    
+    def iniciar_servidor():
+        app.run(host='0.0.0.0', port=3333, debug=False)
+    
+    flask_thread = threading.Thread(target=iniciar_servidor, daemon=True)
+    flask_thread.start()
+    print("Servidor Flask iniciado na porta 3333")
+    print("Endpoint de alertas disponível em: http://localhost:3333/alertas/operacionais")
+    
     coletar_dados()
