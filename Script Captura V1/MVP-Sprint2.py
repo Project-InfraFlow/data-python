@@ -192,7 +192,7 @@ def coletar_dados():
             break
         except Exception as e:
             print(f" Erro durante captura: {e}")
-            time.sleep(5)
+            time.sleep(2)
 
 if __name__ == "__main__":
     print("Inicializando configurações da máquina e componentes...")
