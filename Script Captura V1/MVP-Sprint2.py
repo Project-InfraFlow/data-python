@@ -13,18 +13,18 @@ from dotenv import load_dotenv
 import urllib.request
 import json
 
-load_dotenv(override=True)  # garante que o .env do diretório atual seja lido e sobrescreva o ambiente
+load_dotenv(override=True)  
 inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 config = {
       'user': os.getenv("USER_DB"),
       'password': os.getenv("PASSWORD_DB"),
       'host': os.getenv("HOST_DB"),
-      'port': int(os.getenv("PORT_DB", "3306")),  # <— acrescentado
+      'port': int(os.getenv("PORT_DB", "3306")),  
       'database': os.getenv("DATABASE_DB")
     }
 
