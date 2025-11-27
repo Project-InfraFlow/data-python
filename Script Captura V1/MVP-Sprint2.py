@@ -10,12 +10,15 @@ import datetime as dt
 from mysql.connector import connect, Error
 from tabulate import tabulate
 from dotenv import load_dotenv
+import urllib.request
+import json
 
 load_dotenv(override=True)  # garante que o .env do diretório atual seja lido e sobrescreva o ambiente
 inserir_no_banco = False
 monitoramento = False
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
 config = {
       'user': os.getenv("USER_DB"),
@@ -24,6 +27,21 @@ config = {
       'port': int(os.getenv("PORT_DB", "3306")),  # <— acrescentado
       'database': os.getenv("DATABASE_DB")
     }
+
+def enviar_alerta_slack(mensagem: str):
+    global SLACK_WEBHOOK_URL
+    if not SLACK_WEBHOOK_URL:
+        return
+    try:
+        dados = json.dumps({"text": mensagem}).encode("utf-8")
+        requisicao = urllib.request.Request(
+            SLACK_WEBHOOK_URL,
+            data=dados,
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(requisicao, timeout=5)
+    except Exception as e:
+        print("Erro ao enviar alerta para Slack:", e)
 
 def executar_query(query):
     global config
@@ -121,6 +139,21 @@ def coletar_dados():
                     VALUES ({id_disco_comp}, {id_maquina}, {disco_usado}, '{horario}');
                 """)
 
+            max_cpu = max(cpu) if cpu else 0.0
+
+            if max_cpu > 90:
+                enviar_alerta_slack(
+                    f"Alerta: uso de CPU acima de 90% na máquina {id_maquina}. Valor atual: {max_cpu:.2f}%."
+                )
+            if memoria_usada > 90:
+                enviar_alerta_slack(
+                    f"Alerta: uso de memória acima de 90% na máquina {id_maquina}. Valor atual: {memoria_usada:.2f}%."
+                )
+            if disco_usado > 90:
+                enviar_alerta_slack(
+                    f"Alerta: uso de disco acima de 90% na máquina {id_maquina}. Valor atual: {disco_usado:.2f}%."
+                )
+
             print(f" Dados inseridos às {horario}")
         except KeyboardInterrupt:
             print("\n Captura encerrada manualmente.")
@@ -129,7 +162,6 @@ def coletar_dados():
             print(f" Erro durante captura: {e}")
             time.sleep(5)
 
-# Execução automática
 if __name__ == "__main__":
     print("Inicializando configurações da máquina e componentes...")
     definir_maquina()
