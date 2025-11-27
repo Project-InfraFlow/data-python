@@ -4,35 +4,43 @@ import ping3
 import statistics
 import os 
 from mysql.connector import connect, Error
+# Importa a função para carregar variáveis do arquivo .env
+from dotenv import load_dotenv 
+
+load_dotenv()
 
 MAQUINA_ID = 1
 COMPONENTE_REDE_ID = 4
+# ------------------------------------------
 
 def get_connection():
-    
+
     config = {
       'user': os.getenv("USER_DB"),
       'password': os.getenv("PASSWORD_DB"),
       'host': os.getenv("HOST_DB"),
-      'port': int(os.getenv("PORT_DB", "3306")), 
+      'port': int(os.getenv("PORT_DB", "3306")), # Pega a porta, padrão 3306 se não definida
       'database': os.getenv("DATABASE_DB")
     }
 
+    # Validação básica
     if not all([config['user'], config['password'], config['host'], config['database']]):
         print("Erro: As variáveis de ambiente do banco de dados não estão configuradas corretamente.")
-        print("Certifique-se de definir USER_DB, PASSWORD_DB, HOST_DB e DATABASE_DB.")
+        print("Verifique se o arquivo .env existe e se todas as chaves (USER_DB, etc) estão presentes.")
         return None
 
     try:
+        # Usa o dicionário 'config' para passar os argumentos
         connection = connect(**config) 
         if connection.is_connected():
+            print("Conexão bem-sucedida ao MySQL usando credenciais do .env.")
             return connection
     except Error as e:
         print(f"Erro ao conectar ao MySQL: {e}")
         return None
 
 def insert_leitura(connection, fk_id_componente, fk_id_maquina, dados_float, dados_texto):
-    
+    # Código desta função permanece inalterado
     insert_query = """
     INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, dados_texto, data_hora_captura)
     VALUES (%s, %s, %s, %s, NOW())
@@ -133,4 +141,4 @@ def continuous_monitoring(interval_seconds=30):
             print("Conexão ao MySQL fechada.")
 
 if __name__ == "__main__":
-    continuous_monitoring(interval_seconds=3)
+    continuous_monitoring(interval_seconds=30)
