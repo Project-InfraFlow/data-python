@@ -19,8 +19,6 @@ monitoramento = False
 
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
-
-# ALTERAÇÃO ÚNICA AQUI ↓↓↓
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
 config = {
@@ -45,6 +43,49 @@ def enviar_alerta_slack(mensagem: str):
         urllib.request.urlopen(requisicao, timeout=5)
     except Exception as e:
         print("Erro ao enviar alerta para Slack:", e)
+
+def registrar_alerta_banco(id_componente, valor_atual, nivel_gravidade, descricao):
+    global id_maquina
+    try:
+        horario = str(dt.datetime.now())
+        
+        db = connect(**config)
+        if db.is_connected():
+            with db.cursor() as cursor:
+                query_leitura = f"""
+                    INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, data_hora_captura)
+                    VALUES ({id_componente}, {id_maquina}, {valor_atual}, '{horario}');
+                """
+                cursor.execute(query_leitura)
+                
+                cursor.execute("SELECT LAST_INSERT_ID();")
+                id_leitura = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT id_parametro_alerta FROM parametro_alerta LIMIT 1;")
+                parametro_alerta = cursor.fetchone()
+                
+                if parametro_alerta:
+                    id_parametro = parametro_alerta[0]
+                else:
+                    cursor.execute("INSERT INTO parametro_alerta (min, max) VALUES (0, 100);")
+                    cursor.execute("SELECT LAST_INSERT_ID();")
+                    id_parametro = cursor.fetchone()[0]
+                
+                query_alerta = f"""
+                    INSERT INTO alerta (fk_id_leitura, fk_id_componente, fk_parametro_alerta, descricao, status_alerta)
+                    VALUES ({id_leitura}, {id_componente}, {id_parametro}, '{descricao}', 1);
+                """
+                cursor.execute(query_alerta)
+                
+            db.commit()
+            db.close()
+            
+            print(f"Alerta registrado no banco: {descricao}")
+            
+    except Error as e:
+        print(f'Erro ao registrar alerta no banco: {e}')
+    except Exception as e:
+        print(f"Erro geral ao registrar alerta: {e}")
 
 def executar_query(query):
     global config
@@ -136,18 +177,27 @@ def coletar_dados():
                 """)
 
             max_cpu = max(cpu) if cpu else 0.0
+            
             if max_cpu > 90:
-                enviar_alerta_slack(
-                    f"Alerta: uso de CPU acima de 90% na máquina {id_maquina}. Valor atual: {max_cpu:.2f}%."
-                )
+                mensagem = f"Alerta: uso de CPU acima de 90% na máquina {id_maquina}. Valor atual: {max_cpu:.2f}%."
+                enviar_alerta_slack(mensagem)
+                registrar_alerta_banco(id_cpu_comp, max_cpu, "CRÍTICO", f"CPU em saturação: {max_cpu:.2f}%")
+            elif max_cpu > 85:
+                registrar_alerta_banco(id_cpu_comp, max_cpu, "ALTO", f"CPU em alta utilização: {max_cpu:.2f}%")
+            
             if memoria_usada > 90:
-                enviar_alerta_slack(
-                    f"Alerta: uso de memória acima de 90% na máquina {id_maquina}. Valor atual: {memoria_usada:.2f}%."
-                )
+                mensagem = f"Alerta: uso de memória acima de 90% na máquina {id_maquina}. Valor atual: {memoria_usada:.2f}%."
+                enviar_alerta_slack(mensagem)
+                registrar_alerta_banco(id_ram_comp, memoria_usada, "CRÍTICO", f"RAM em saturação: {memoria_usada:.2f}%")
+            elif memoria_usada > 85:
+                registrar_alerta_banco(id_ram_comp, memoria_usada, "ALTO", f"RAM em alta utilização: {memoria_usada:.2f}%")
+            
             if disco_usado > 90:
-                enviar_alerta_slack(
-                    f"Alerta: uso de disco acima de 90% na máquina {id_maquina}. Valor atual: {disco_usado:.2f}%."
-                )
+                mensagem = f"Alerta: uso de disco acima de 90% na máquina {id_maquina}. Valor atual: {disco_usado:.2f}%."
+                enviar_alerta_slack(mensagem)
+                registrar_alerta_banco(id_disco_comp, disco_usado, "CRÍTICO", f"Disco em saturação: {disco_usado:.2f}%")
+            elif disco_usado > 85:
+                registrar_alerta_banco(id_disco_comp, disco_usado, "ALTO", f"Disco em alta utilização: {disco_usado:.2f}%")
 
             print(f" Dados inseridos às {horario}")
 
