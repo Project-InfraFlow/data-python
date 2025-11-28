@@ -4,14 +4,13 @@ import ping3
 import statistics
 import os 
 from mysql.connector import connect, Error
-# Importa a função para carregar variáveis do arquivo .env
 from dotenv import load_dotenv 
 
 load_dotenv()
 
-MAQUINA_ID = 1
+MAQUINAS = [1, 2, 3, 4, 5]
+
 COMPONENTE_REDE_ID = 4
-# ------------------------------------------
 
 def get_connection():
 
@@ -23,50 +22,50 @@ def get_connection():
       'database': os.getenv("DATABASE_DB")
     }
 
-    # Validação básica
     if not all([config['user'], config['password'], config['host'], config['database']]):
-        print("Erro: As variáveis de ambiente do banco de dados não estão configuradas corretamente.")
-        print("Verifique se o arquivo .env existe e se todas as chaves (USER_DB, etc) estão presentes.")
+        print("Erro: Variáveis de ambiente não configuradas corretamente.")
         return None
 
     try:
-        # Usa o dicionário 'config' para passar os argumentos
-        connection = connect(**config) 
+        connection = connect(**config)
         if connection.is_connected():
-            print("Conexão bem-sucedida ao MySQL usando credenciais do .env.")
+            print("Conectado ao MySQL.")
             return connection
     except Error as e:
         print(f"Erro ao conectar ao MySQL: {e}")
         return None
 
+
 def insert_leitura(connection, fk_id_componente, fk_id_maquina, dados_float, dados_texto):
-    # Código desta função permanece inalterado
+
     insert_query = """
     INSERT INTO leitura (fk_id_componente, fk_id_maquina, dados_float, dados_texto, data_hora_captura)
     VALUES (%s, %s, %s, %s, NOW())
     """
+
     data = (fk_id_componente, fk_id_maquina, dados_float, dados_texto)
-    
+
     try:
         cursor = connection.cursor()
         cursor.execute(insert_query, data)
         connection.commit()
     except Error as e:
-        print(f"Erro ao inserir dados na tabela 'leitura': {e}")
+        print(f"❌ Erro ao inserir dados: {e}")
         connection.rollback()
     finally:
         if cursor:
             cursor.close()
 
+
 def measure_network_metrics(target_host="google.com"):
-    # Código desta função permanece inalterado
+
     latencies = []
     packet_loss_count = 0
-    total_pings = 5 
-    
+    total_pings = 5
+
     for _ in range(total_pings):
         try:
-            delay = ping3.ping(target_host, unit='ms', timeout=2) 
+            delay = ping3.ping(target_host, unit='ms', timeout=2)
             if delay is not None:
                 latencies.append(delay)
             else:
@@ -89,11 +88,10 @@ def measure_network_metrics(target_host="google.com"):
         st = speedtest.Speedtest()
         st.get_best_server()
         download_speed_bytes = st.download()
-        download_speed_mbps = round(download_speed_bytes / (10**6), 2) 
-    except speedtest.ConfigRetrievalError:
-        pass
+        download_speed_mbps = round(download_speed_bytes / (10**6), 2)
     except Exception as e:
-        print(f"Erro no speedtest: {e}")
+        print(f"[ERRO SPEEDTEST] {e}")
+
 
     return {
         "latencia_ms": round(avg_latency, 2),
@@ -102,43 +100,42 @@ def measure_network_metrics(target_host="google.com"):
         "velocidade_download_mbps": download_speed_mbps
     }
 
-def continuous_monitoring(interval_seconds=30):
-    
-    print(f"Monitoramento contínuo iniciado para Máquina ID {MAQUINA_ID}. Intervalo: {interval_seconds} segundos.")
-    print("-" * 50)
-    
+
+def continuous_monitoring(interval_seconds=10):
+
     connection = get_connection()
     if not connection:
         return
 
+    print(f"Monitoramento iniciado para máquinas: {MAQUINAS}")
+    print("-" * 60)
+
     try:
         while True:
-            timestamp_start = time.strftime("%Y-%m-%d %H:%M:%S")
+
             metrics = measure_network_metrics()
 
-            print(f"[{timestamp_start}] Lat: {metrics['latencia_ms']}ms, Jitter: {metrics['jitter_ms']}ms, Perda: {metrics['perda_pacotes_%']}%, Download: {metrics['velocidade_download_mbps']} Mbps")
+            print(f"Latência: {metrics['latencia_ms']} ms | "
+                  f"Jitter: {metrics['jitter_ms']} ms | "
+                  f"Perda: {metrics['perda_pacotes_%']}% | "
+                  f"Download: {metrics['velocidade_download_mbps']} Mbps")
 
-            common_args = {
-                "connection": connection,
-                "fk_id_componente": COMPONENTE_REDE_ID,
-                "fk_id_maquina": MAQUINA_ID,
-            }
+            for maquina_id in MAQUINAS:
 
-            insert_leitura(**common_args, dados_float=metrics['latencia_ms'],              dados_texto="Latencia Media (ms)")
-            insert_leitura(**common_args, dados_float=metrics['jitter_ms'],                dados_texto="Jitter (ms)")
-            insert_leitura(**common_args, dados_float=metrics['perda_pacotes_%'],          dados_texto="Perda de Pacotes (%)")
-            insert_leitura(**common_args, dados_float=metrics['velocidade_download_mbps'], dados_texto="Velocidade Download (Mbps)")
+                insert_leitura(connection, COMPONENTE_REDE_ID, maquina_id, metrics['latencia_ms'], "Latencia Media (ms)")
+                insert_leitura(connection, COMPONENTE_REDE_ID, maquina_id, metrics['jitter_ms'], "Jitter (ms)")
+                insert_leitura(connection, COMPONENTE_REDE_ID, maquina_id, metrics['perda_pacotes_%'], "Perda de Pacotes (%)")
+                insert_leitura(connection, COMPONENTE_REDE_ID, maquina_id, metrics['velocidade_download_mbps'], "Velocidade Download (Mbps)")
 
             time.sleep(interval_seconds)
 
     except KeyboardInterrupt:
-        print("\nMonitoramento interrompido pelo usuário.")
-    except Exception as e:
-        print(f"Ocorreu um erro inesperado durante o monitoramento: {e}")
+        print("Monitoramento interrompido.")
     finally:
         if connection and connection.is_connected():
             connection.close()
-            print("Conexão ao MySQL fechada.")
+            print("🔌 Conexão MySQL encerrada.")
+
 
 if __name__ == "__main__":
-    continuous_monitoring(interval_seconds=30)
+    continuous_monitoring(interval_seconds=5)
