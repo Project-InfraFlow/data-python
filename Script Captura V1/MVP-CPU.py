@@ -25,12 +25,9 @@ def get_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
-def medir_latencia_cpu():
-    cpu_times = p.cpu_times()
-    total = cpu_times.user + cpu_times.system + cpu_times.idle
-    if total == 0:
-        return 0
-    return round((cpu_times.idle / total) * 1000, 2)
+def medir_tempo_ocioso_cpu():
+    idle = p.cpu_times_percent(interval=1).idle
+    return round(idle, 2)
 
 def inserir_leitura(id_componente, id_maquina, valor, horario, id_nucleo=None):
     try:
@@ -92,15 +89,15 @@ def iniciar_captura():
     comps = buscar_componentes(id_maquina)
     id_cpu = None
     id_proc = None
-    id_lat = None
+    id_idle = None  
 
     for c in comps:
         if c["nome_componente"] == "CPU":
             id_cpu = c["id_componente"]
         elif c["nome_componente"] == "Processos":
             id_proc = c["id_componente"]
-        elif c["nome_componente"] == "Latência CPU":
-            id_lat = c["id_componente"]
+        elif c["nome_componente"] == "CPU Idle":  
+            id_idle = c["id_componente"]
 
     nucleos_cpu = buscar_nucleos(id_maquina, id_cpu)
 
@@ -108,28 +105,18 @@ def iniciar_captura():
 
     while True:
         horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         cpu_nucleos = p.cpu_percent(interval=1, percpu=True)
         total_processos = len(p.pids())
-        lat = medir_latencia_cpu()
+        tempo_ocioso = medir_tempo_ocioso_cpu()
 
         for i, valor in enumerate(cpu_nucleos):
             inserir_leitura(id_cpu, id_maquina, valor, horario, id_nucleo=nucleos_cpu[i])
 
         inserir_leitura(id_proc, id_maquina, total_processos, horario)
 
-        processos_nucleo = {}
-        for proc in p.process_iter(["pid", "name"]):
-            try:
-                n = proc.cpu_num()
-                processos_nucleo[n] = processos_nucleo.get(n, 0) + 1
-            except:
-                pass
+        inserir_leitura(id_idle, id_maquina, tempo_ocioso, horario)
 
-        for i, id_nucleo in enumerate(nucleos_cpu):
-            quantidade = processos_nucleo.get(i, 0)
-            inserir_leitura(id_proc, id_maquina, quantidade, horario, id_nucleo=id_nucleo)
-
-        inserir_leitura(id_lat, id_maquina, lat, horario)
         time.sleep(15)
 
 iniciar_captura()
