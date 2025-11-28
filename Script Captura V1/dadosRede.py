@@ -19,7 +19,7 @@ def get_connection():
       'user': os.getenv("USER_DB"),
       'password': os.getenv("PASSWORD_DB"),
       'host': os.getenv("HOST_DB"),
-      'port': int(os.getenv("PORT_DB", "3306")), # Pega a porta, padrão 3306 se não definida
+      'port': int(os.getenv("PORT_DB", "3306")), 
       'database': os.getenv("DATABASE_DB")
     }
 

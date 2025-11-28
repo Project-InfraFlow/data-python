@@ -19,7 +19,7 @@ monitoramento = False
 
 token_empresa = os.getenv("TOKEN_EMPRESA")
 id_maquina = os.getenv("ID_MAQUINA")
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 config = {
     'user': os.getenv("USER_DB"),
