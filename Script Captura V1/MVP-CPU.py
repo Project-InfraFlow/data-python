@@ -79,6 +79,30 @@ def buscar_nucleos(id_maquina, id_cpu):
     db.close()
     return [r["id_nucleo"] for r in rows]
 
+def criar_componente_processos(id_maquina):
+    """garante que exista o componente 'Processos' e devolve o id"""
+    db = get_connection()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT id_componente 
+        FROM componente 
+        WHERE fk_id_maquina = %s AND nome_componente = 'Processos'
+    """, (id_maquina,))
+    row = cursor.fetchone()
+    if row:
+        id_proc = row["id_componente"]
+    else:
+        cursor.execute("""
+            INSERT INTO componente (fk_id_maquina, nome_componente, unidade_de_medida)
+            VALUES (%s, 'Processos', 'qtd')
+        """, (id_maquina,))
+        db.commit()
+        id_proc = cursor.lastrowid
+        print("Componente 'Processos' criado com id:", id_proc)
+    cursor.close()
+    db.close()
+    return id_proc
+
 def iniciar_captura():
     NOME_MAQUINA = "ECV-APP-01"
     id_maquina = buscar_maquina(NOME_MAQUINA)
@@ -96,8 +120,12 @@ def iniciar_captura():
             id_cpu = c["id_componente"]
         elif c["nome_componente"] == "Processos":
             id_proc = c["id_componente"]
-        elif c["nome_componente"] == "CPU Idle":  
+        elif c["nome_componente"] == "CPU_Idle":  
             id_idle = c["id_componente"]
+
+    # garante que o componente Processos exista
+    if id_proc is None:
+        id_proc = criar_componente_processos(id_maquina)
 
     nucleos_cpu = buscar_nucleos(id_maquina, id_cpu)
 
@@ -110,11 +138,15 @@ def iniciar_captura():
         total_processos = len(p.pids())
         tempo_ocioso = medir_tempo_ocioso_cpu()
 
+        # CPU por núcleo
         for i, valor in enumerate(cpu_nucleos):
-            inserir_leitura(id_cpu, id_maquina, valor, horario, id_nucleo=nucleos_cpu[i])
+            if i < len(nucleos_cpu):
+                inserir_leitura(id_cpu, id_maquina, valor, horario, id_nucleo=nucleos_cpu[i])
 
+        # Processos em execução (contador simples)
         inserir_leitura(id_proc, id_maquina, total_processos, horario)
 
+        # Tempo ocioso CPU
         inserir_leitura(id_idle, id_maquina, tempo_ocioso, horario)
 
         time.sleep(15)
