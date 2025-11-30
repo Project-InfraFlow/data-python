@@ -123,7 +123,6 @@ def iniciar_captura():
         elif c["nome_componente"] == "CPU_Idle":  
             id_idle = c["id_componente"]
 
-    # garante que o componente Processos exista
     if id_proc is None:
         id_proc = criar_componente_processos(id_maquina)
 
@@ -134,19 +133,14 @@ def iniciar_captura():
     while True:
         horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        cpu_nucleos = p.cpu_percent(interval=1, percpu=True)
+        cpu_total = p.cpu_percent(interval=1)
         total_processos = len(p.pids())
         tempo_ocioso = medir_tempo_ocioso_cpu()
 
-        # CPU por núcleo
-        for i, valor in enumerate(cpu_nucleos):
-            if i < len(nucleos_cpu):
-                inserir_leitura(id_cpu, id_maquina, valor, horario, id_nucleo=nucleos_cpu[i])
+        inserir_leitura(id_cpu, id_maquina, cpu_total, horario)
 
-        # Processos em execução (contador simples)
         inserir_leitura(id_proc, id_maquina, total_processos, horario)
 
-        # Tempo ocioso CPU
         inserir_leitura(id_idle, id_maquina, tempo_ocioso, horario)
 
         time.sleep(15)
