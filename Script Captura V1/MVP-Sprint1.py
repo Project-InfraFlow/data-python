@@ -96,7 +96,7 @@ def coletar_e_inserir_dados():
     # capturar ids dos núcleos desta máquina (em ordem)
     nucleos_ids = [row[0] for row in executar_query(f"SELECT id_nucleo FROM nucleo_cpu WHERE fk_id_maquina = {id_maquina} ORDER BY id_nucleo")]
     while inserir_no_banco:
-        cpu = p.cpu_percent(interval=10, percpu=True)
+        cpu = p.cpu_percent(interval=3, percpu=True)
         memoria_usada = p.virtual_memory().percent
         if(os.name == 'nt'):
             disco_usado = p.disk_usage("C:\\").percent
