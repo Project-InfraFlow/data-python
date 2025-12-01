@@ -44,18 +44,6 @@ def inserir_leitura(id_componente, id_maquina, valor, horario, id_nucleo=None):
     except Exception as e:
         print("Erro ao inserir leitura:", e)
 
-def buscar_maquina(nome):
-    db = get_connection()
-    cursor = db.cursor()
-    cursor.execute(
-        "SELECT id_maquina FROM maquina WHERE nome_maquina = %s",
-        (nome,)
-    )
-    row = cursor.fetchone()
-    cursor.close()
-    db.close()
-    return row["id_maquina"] if row else None
-
 def buscar_componentes(id_maquina):
     db = get_connection()
     cursor = db.cursor()
@@ -109,36 +97,38 @@ def criar_componente_processos(id_maquina):
     return id_proc
 
 def iniciar_captura():
-    NOME_MAQUINA = "ECV-APP-01"
+    ID_MAQUINA = 1 
 
     print("INICIANDO SCRIPT")
-    
-    id_maquina = buscar_maquina(NOME_MAQUINA)
-    
-    if not id_maquina:
-        print("Máquina não encontrada:", NOME_MAQUINA)
-        return
+    print(f"CAPTURANDO DADOS DA MÁQUINA ID: {ID_MAQUINA}")
 
-    comps = buscar_componentes(id_maquina)
+    comps = buscar_componentes(ID_MAQUINA)
 
     id_cpu = None
     id_proc = None
     id_idle = None
 
     for c in comps:
-        if c["nome_componente"] == "CPU":
+        nome = (c["nome_componente"] or "").strip().lower()
+
+        if nome == "cpu":
             id_cpu = c["id_componente"]
-        elif c["nome_componente"] == "Processos":
+        elif nome == "processos":
             id_proc = c["id_componente"]
-        elif c["nome_componente"] == "CPU_Idle":
+        elif nome in ("cpu idle", "cpu_idle", "cpuidle", "cpu idle %"):
             id_idle = c["id_componente"]
 
+    if id_cpu is None:
+        print("Nenhum componente 'CPU' encontrado para a máquina ID:", ID_MAQUINA)
+        return
+
     if id_proc is None:
-        id_proc = criar_componente_processos(id_maquina)
+        id_proc = criar_componente_processos(ID_MAQUINA)
 
-    nucleos_cpu = buscar_nucleos(id_maquina, id_cpu)
+    nucleos_cpu = buscar_nucleos(ID_MAQUINA, id_cpu)
 
-    print("CAPTURANDO DADOS DA MÁQUINA:", NOME_MAQUINA)
+    if id_idle is None:
+        print("Nenhum componente de 'CPU Idle' encontrado. Leituras de Idle não serão gravadas.")
 
     while True:
         horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -150,9 +140,11 @@ def iniciar_captura():
 
         total_processos = len(p.pids())
 
-        inserir_leitura(id_cpu, id_maquina, cpu_total, horario)
-        inserir_leitura(id_proc, id_maquina, total_processos, horario)
-        inserir_leitura(id_idle, id_maquina, tempo_ocioso, horario)
+        inserir_leitura(id_cpu, ID_MAQUINA, cpu_total, horario)
+        inserir_leitura(id_proc, ID_MAQUINA, total_processos, horario)
+
+        if id_idle is not None:
+            inserir_leitura(id_idle, ID_MAQUINA, tempo_ocioso, horario)
 
         time.sleep(15)
 
