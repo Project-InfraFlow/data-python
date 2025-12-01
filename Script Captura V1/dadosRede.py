@@ -99,7 +99,7 @@ def criar_dados_iniciais(connection):
     for dado in dados_iniciais:
         insert_leitura(connection, dado[0], dado[1], dado[2], dado[3])
 
-def continuous_monitoring(interval_seconds=30):
+def continuous_monitoring(interval_seconds=5):
     connection = get_connection()
     if not connection:
         print("Não foi possível conectar ao banco")
@@ -150,4 +150,4 @@ def continuous_monitoring(interval_seconds=30):
             print("Conexão MySQL encerrada")
 
 if __name__ == "__main__":
-    continuous_monitoring(interval_seconds=30)
+    continuous_monitoring(interval_seconds=5)
