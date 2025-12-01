@@ -133,7 +133,7 @@ def iniciar_captura():
     while True:
         horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        cpu_info = p.cpu_times_percent(interval=0)  
+        cpu_info = p.cpu_times_percent(interval=1)
 
         tempo_ocioso = round(cpu_info.idle, 2)
         cpu_total = round(100 - tempo_ocioso, 2)
@@ -146,7 +146,7 @@ def iniciar_captura():
         if id_idle is not None:
             inserir_leitura(id_idle, ID_MAQUINA, tempo_ocioso, horario)
 
-        time.sleep(3)
+        time.sleep(15)
 
 if __name__ == "__main__":
     iniciar_captura()
