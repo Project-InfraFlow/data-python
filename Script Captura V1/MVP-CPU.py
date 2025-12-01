@@ -42,12 +42,15 @@ def inserir_leitura(id_componente, id_maquina, valor, horario, id_nucleo=None):
         cursor.close()
         db.close()
     except Exception as e:
-        print("Erro:", e)
+        print("Erro ao inserir leitura:", e)
 
 def buscar_maquina(nome):
     db = get_connection()
     cursor = db.cursor()
-    cursor.execute("SELECT id_maquina FROM maquina WHERE nome_maquina = %s", (nome,))
+    cursor.execute(
+        "SELECT id_maquina FROM maquina WHERE nome_maquina = %s",
+        (nome,)
+    )
     row = cursor.fetchone()
     cursor.close()
     db.close()
@@ -80,7 +83,6 @@ def buscar_nucleos(id_maquina, id_cpu):
     return [r["id_nucleo"] for r in rows]
 
 def criar_componente_processos(id_maquina):
-    """garante que exista o componente 'Processos' e devolve o id"""
     db = get_connection()
     cursor = db.cursor()
     cursor.execute("""
@@ -89,38 +91,46 @@ def criar_componente_processos(id_maquina):
         WHERE fk_id_maquina = %s AND nome_componente = 'Processos'
     """, (id_maquina,))
     row = cursor.fetchone()
+
     if row:
         id_proc = row["id_componente"]
     else:
         cursor.execute("""
-            INSERT INTO componente (fk_id_maquina, nome_componente, unidade_de_medida)
+            INSERT INTO componente
+            (fk_id_maquina, nome_componente, unidade_de_medida)
             VALUES (%s, 'Processos', 'qtd')
         """, (id_maquina,))
         db.commit()
         id_proc = cursor.lastrowid
-        print("Componente 'Processos' criado com id:", id_proc)
+        print("Componente 'Processos' criado:", id_proc)
+
     cursor.close()
     db.close()
     return id_proc
 
 def iniciar_captura():
     NOME_MAQUINA = "ECV-APP-01"
+
+    print("INICIANDO SCRIPT")
+    
     id_maquina = buscar_maquina(NOME_MAQUINA)
+    
     if not id_maquina:
         print("Máquina não encontrada:", NOME_MAQUINA)
         return
 
     comps = buscar_componentes(id_maquina)
+
     id_cpu = None
     id_proc = None
-    id_idle = None  
+    id_idle = None
 
     for c in comps:
         if c["nome_componente"] == "CPU":
             id_cpu = c["id_componente"]
         elif c["nome_componente"] == "Processos":
             id_proc = c["id_componente"]
-        elif c["nome_componente"] == "CPU_Idle":  
+        elif c["nome_componente"] == "CPU_Idle":
             id_idle = c["id_componente"]
 
     if id_proc is None:
@@ -138,10 +148,13 @@ def iniciar_captura():
         tempo_ocioso = round(cpu_info.idle, 2)
         cpu_total = round(100 - tempo_ocioso, 2)
 
-        total_processos = len(p.pids())  
+        total_processos = len(p.pids())
 
         inserir_leitura(id_cpu, id_maquina, cpu_total, horario)
         inserir_leitura(id_proc, id_maquina, total_processos, horario)
         inserir_leitura(id_idle, id_maquina, tempo_ocioso, horario)
 
         time.sleep(15)
+
+if __name__ == "__main__":
+    iniciar_captura()
